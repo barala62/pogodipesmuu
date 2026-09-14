@@ -50,6 +50,37 @@ export class SnippetAudioPlayer {
     return this.audioCtx;
   }
 
+    /**
+   * iOS Safari zahteva da se AudioContext "otključa" unutar
+   * direktnog tap/click gesta korisnika, pre bilo kakvog async posla.
+   * Ovo se poziva jednom, pri prvom dodiru ekrana.
+   */
+  public unlock(): void {
+    try {
+      const ctx = this.getAudioContext();
+      if (ctx.state === 'suspended') {
+        ctx.resume();
+      }
+      // Pusti nečujan bafer da potpuno "probudi" audio hardver na iOS-u
+      const buffer = ctx.createBuffer(1, 1, 22050);
+      const source = ctx.createBufferSource();
+      source.buffer = buffer;
+      source.connect(ctx.destination);
+      source.start(0);
+
+      // Otključaj i HTML5 <audio> fallback element na isti način
+      if (!this.htmlAudio) {
+        this.htmlAudio = new Audio();
+      }
+      this.htmlAudio
+        .play()
+        .then(() => this.htmlAudio?.pause())
+        .catch(() => {});
+    } catch (e) {
+      console.warn('[SnippetAudioPlayer] unlock failed:', e);
+    }
+  }
+
   public setCallbacks(
     onTimeUpdate: (time: number, max: number) => void,
     onStateChange: (isPlaying: boolean) => void,

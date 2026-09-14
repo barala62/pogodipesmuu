@@ -15,9 +15,29 @@ app.get('/api/health', (req, res) => {
   res.json({ status: 'ok', uptime: process.uptime() });
 });
 
-// Admin and practice credentials
-const ADMIN_PASSWORD = 'pogodipesmu2026';
-const PRACTICE_PASSWORD = 'trening2026';
+// Admin and practice credentials (configurable via environment variables)
+const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || 'pogodipesmu2026';
+const PRACTICE_PASSWORD = process.env.PRACTICE_PASSWORD || 'trening2026';
+
+// Ephemeral server-side secret for admin session tokens
+const ADMIN_TOKEN_SECRET = Buffer.from(Date.now().toString() + '_' + Math.random().toString(36)).toString('base64');
+function getValidAdminToken(): string {
+  // Simple deterministic token based on current admin password & boot secret
+  return Buffer.from(`${ADMIN_PASSWORD}:${ADMIN_TOKEN_SECRET}`).toString('base64');
+}
+
+function isAuthorizedAdmin(req: express.Request): boolean {
+  const authHeader = req.headers.authorization;
+  const bearerToken = authHeader?.startsWith('Bearer ') ? authHeader.slice(7).trim() : null;
+  const bodyToken = req.body?.token;
+  const rawPassword = req.body?.password;
+
+  const validToken = getValidAdminToken();
+  if (bearerToken && bearerToken === validToken) return true;
+  if (bodyToken && bodyToken === validToken) return true;
+  if (rawPassword && rawPassword === ADMIN_PASSWORD) return true;
+  return false;
+}
 
 // Persistent schedule overrides file
 const DATA_DIR = path.join(process.cwd(), 'data');
@@ -444,7 +464,7 @@ app.get('/api/schedule', (req, res) => {
 app.post('/api/admin/verify', (req, res) => {
   const { password } = req.body || {};
   if (password === ADMIN_PASSWORD) {
-    res.json({ success: true, authorized: true });
+    res.json({ success: true, authorized: true, token: getValidAdminToken() });
   } else {
     res.status(401).json({ success: false, error: 'Pogrešna lozinka' });
   }
@@ -462,11 +482,12 @@ app.post('/api/practice/verify', (req, res) => {
 
 // API: Admin update schedule override (applies immediately to all players)
 app.post('/api/admin/schedule', (req, res) => {
-  const { password, dateStr, category, songId } = req.body || {};
-  if (password !== ADMIN_PASSWORD) {
+  if (!isAuthorizedAdmin(req)) {
     res.status(401).json({ error: 'Neautorizovan pristup' });
     return;
   }
+
+  const { dateStr, category, songId } = req.body || {};
 
   if (!dateStr || !category || !songId) {
     res.status(400).json({ error: 'Nedostaju podaci (dateStr, category, songId)' });
@@ -484,11 +505,12 @@ app.post('/api/admin/schedule', (req, res) => {
 
 // API: Admin delete schedule override (reverts to algorithmic daily song for all players)
 app.delete('/api/admin/schedule', (req, res) => {
-  const { password, dateStr, category } = req.body || {};
-  if (password !== ADMIN_PASSWORD) {
+  if (!isAuthorizedAdmin(req)) {
     res.status(401).json({ error: 'Neautorizovan pristup' });
     return;
   }
+
+  const { dateStr, category } = req.body || {};
 
   if (!dateStr || !category) {
     res.status(400).json({ error: 'Nedostaju parametri' });

@@ -129,6 +129,22 @@ export default function App() {
     };
   }, []);
 
+    // Otključaj audio na iOS-u pri prvom dodiru korisnika na ekran
+  useEffect(() => {
+    const unlockAudio = () => {
+      audioPlayerRef.current?.unlock();
+      document.removeEventListener('touchend', unlockAudio);
+      document.removeEventListener('click', unlockAudio);
+    };
+    document.addEventListener('touchend', unlockAudio, { once: true });
+    document.addEventListener('click', unlockAudio, { once: true });
+
+    return () => {
+      document.removeEventListener('touchend', unlockAudio);
+      document.removeEventListener('click', unlockAudio);
+    };
+  }, []);
+
   // Sync server schedule on mount and check admin access URL
   useEffect(() => {
     let lastOverridesJson = '';

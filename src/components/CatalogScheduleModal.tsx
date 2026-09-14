@@ -295,14 +295,14 @@ export const CatalogScheduleModal: React.FC<CatalogScheduleModalProps> = ({
       setScheduleOverride(targetDateStr, targetCat, songId);
       setOverridesVersion(v => v + 1);
       setChangeDateTarget(null);
-      setStatusMessage(`Pesma za ${changeDateTarget.label} je uspešno promenjena! Svi prethodni skipovi su resetovani.`);
+      setStatusMessage(`✓ Uspešno sačuvano na serveru! Nova pesma za ${changeDateTarget.label} je odmah aktivna za sve posetioce sajta.`);
       if (onScheduleChanged) onScheduleChanged({ dateStr: targetDateStr, category: targetCat, newSongId: songId });
     } catch (err) {
       console.error('Failed to save to server:', err);
       setScheduleOverride(targetDateStr, targetCat, songId);
       setOverridesVersion(v => v + 1);
       setChangeDateTarget(null);
-      setStatusMessage('Sačuvano lokalno. Svi skipovi su resetovani.');
+      setStatusMessage('✓ Sačuvano u lokalnoj memoriji.');
       if (onScheduleChanged) onScheduleChanged({ dateStr: targetDateStr, category: targetCat, newSongId: songId });
     } finally {
       setIsSavingServer(false);
@@ -635,8 +635,12 @@ export const CatalogScheduleModal: React.FC<CatalogScheduleModalProps> = ({
                                   </span>
                                 )}
                                 {item.isOverridden && (
-                                  <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-amber-500/20 text-amber-300 border border-amber-500/30">
-                                    Server Override
+                                  <span 
+                                    className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-amber-500/20 text-amber-300 border border-amber-500/30 flex items-center gap-1"
+                                    title="Ova pesma je ručno postavljena na serveru i važi za sve igrače na sajtu"
+                                  >
+                                    <Check className="w-3 h-3 text-amber-400" />
+                                    Ručno izmenjeno (aktivno za sve)
                                   </span>
                                 )}
                               </div>
@@ -678,10 +682,10 @@ export const CatalogScheduleModal: React.FC<CatalogScheduleModalProps> = ({
                               <button
                                 onClick={() => handleResetOverride(item.dateStr)}
                                 disabled={isSavingServer}
-                                className="px-2 py-1 text-[10px] text-zinc-400 hover:text-red-400 hover:bg-red-500/10 rounded transition-all"
-                                title="Vrati na originalni automatski raspored"
+                                className="px-2.5 py-1 text-[11px] font-medium text-amber-300 hover:text-red-300 hover:bg-red-500/10 border border-amber-500/30 hover:border-red-500/30 rounded-lg transition-all"
+                                title="Poništi ručnu izmenu i vrati originalnu automatsku pesmu za sve igrače"
                               >
-                                Poništi
+                                Vrati automatsku
                               </button>
                             )}
                           </div>

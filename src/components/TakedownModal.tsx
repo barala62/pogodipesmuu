@@ -56,10 +56,10 @@ export const TakedownModal: React.FC<TakedownModalProps> = ({
           `Zahtev #${data.ticketId} je uspešno zaprimljen! Pesma će biti proverena i uklonjena iz rotacije u roku od najviše 24 sata. Potvrda je poslata na ${email}.`
         );
       } else {
-        setError(data.error || 'Došlo je do greške pri slanju. Pokušajte ponovo ili pišite na kontakt@pogodipesmu.com.');
+        setError(data.error || 'Došlo je do greške pri slanju. Pokušajte ponovo ili pišite na pogodipesmu.kontakt@gmail.com.');
       }
     } catch {
-      setError('Greška u komunikaciji sa serverom. Molimo pošaljite direktan mejl na: kontakt@pogodipesmu.com');
+      setError('Greška u komunikaciji sa serverom. Molimo pošaljite direktan mejl na: pogodipesmu.kontakt@gmail.com');
     } finally {
       setIsSubmitting(false);
     }
@@ -210,7 +210,7 @@ export const TakedownModal: React.FC<TakedownModalProps> = ({
 
               <div className="pt-2 flex items-center justify-between gap-3">
                 <a
-                  href={`mailto:kontakt@pogodipesmu.com?subject=Takedown%20Zahtev&body=${encodeURIComponent(
+                  href={`mailto:pogodipesmu.kontakt@gmail.com?subject=Takedown%20Zahtev&body=${encodeURIComponent(
                     `Zahtev za uklanjanje pesme:\n${songInfo}\n\nPodnosilac: ${claimantName}\nEmail: ${email}`
                   )}`}
                   className="text-xs text-zinc-400 hover:text-white flex items-center gap-1.5 transition-colors"

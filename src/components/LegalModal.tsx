@@ -156,7 +156,7 @@ export const LegalModal: React.FC<LegalModalProps> = ({
                 <h3 className="text-white font-bold text-sm">5. Kontakt administratora</h3>
                 <p className="text-zinc-400">
                   Za sva pitanja u vezi sa privatnošću ili uklanjanjem podataka, možete nas kontaktirati na zvanični kontakt:{' '}
-                  <span className="text-emerald-400 font-mono">kontakt@pogodipesmu.com</span> (ili putem forme za prijavu u futeru).
+                  <span className="text-emerald-400 font-mono">pogodipesmu.kontakt@gmail.com</span> (ili putem forme za prijavu u futeru).
                 </p>
               </section>
             </div>

@@ -168,11 +168,11 @@ export const Footer: React.FC<FooterProps> = ({
             )}
 
             <a
-              href="mailto:kontakt@pogodipesmu.com"
+              href="mailto:pogodipesmu.kontakt@gmail.com"
               className="hover:text-zinc-200 transition-colors flex items-center gap-1 text-zinc-500"
             >
               <Mail className="w-3 h-3" />
-              <span>kontakt@pogodipesmu.com</span>
+              <span>pogodipesmu.kontakt@gmail.com</span>
             </a>
           </div>
 

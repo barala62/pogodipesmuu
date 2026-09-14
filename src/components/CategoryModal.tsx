@@ -135,9 +135,11 @@ export const CategoryModal: React.FC<CategoryModalProps> = ({
                       <span className="font-bold text-sm text-white group-hover:text-emerald-300 transition-colors">
                         {cat.name}
                       </span>
-                      <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-white/10 text-zinc-300">
-                        {cat.badge}
-                      </span>
+                      {cat.badge ? (
+                        <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-white/10 text-zinc-300">
+                          {cat.badge}
+                        </span>
+                      ) : null}
 
                       {/* Status Badges: Done / In Progress / Ready */}
                       {isDone ? (

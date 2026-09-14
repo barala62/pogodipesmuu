@@ -526,7 +526,9 @@ export default function App() {
               className="px-2.5 py-0.5 rounded-full bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 text-xs font-bold transition-colors flex items-center gap-1.5"
             >
               <span>{currentCategoryInfo.name}</span>
-              <span className="text-[10px] opacity-75 font-normal">({currentCategoryInfo.badge})</span>
+              {currentCategoryInfo.badge && (
+                <span className="text-[10px] opacity-75 font-normal">({currentCategoryInfo.badge})</span>
+              )}
             </button>
           </div>
 

@@ -39,14 +39,14 @@ export const CATEGORIES: CategoryInfo[] = [
   {
     id: 'daily-mix',
     name: 'Dnevni Miks',
-    badge: 'Glavni Izazov ⭐',
+    badge: '',
     description: 'Zvanična pesma dana iz celokupne riznice balkanskih hitova. Za sve generacije!',
     icon: 'Disc3'
   },
   {
     id: 'moderno',
     name: 'Moderni Hitovi & Trap',
-    badge: 'Trending 🔥',
+    badge: '',
     description: 'Vreli zvuk današnjice: Voyage, Nucci, Prija, Tea Tairović, Jala & Buba, Desingerica...',
     genreFilter: 'moderno',
     icon: 'Flame'
@@ -54,7 +54,7 @@ export const CATEGORIES: CategoryInfo[] = [
   {
     id: 'ex-yu',
     name: 'Ex-Yu Klasika',
-    badge: 'Pop & Rok 🎸',
+    badge: '',
     description: 'Večni gitarski i pop klasici: Bijelo Dugme, Zdravko Čolić, Bajaga, EKV, Parni Valjak...',
     genreFilter: 'ex-yu',
     icon: 'Music2'

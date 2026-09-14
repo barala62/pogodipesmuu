@@ -1,6 +1,7 @@
 import express from 'express';
 import path from 'path';
 import fs from 'fs';
+import crypto from 'crypto';
 import { createServer as createViteServer } from 'vite';
 import { ALL_BALKAN_SONGS } from './src/data/songs/balkanSongs';
 import { Song, SongPreviewResponse } from './src/types';
@@ -10,20 +11,135 @@ const PORT = 3000;
 
 app.use(express.json());
 
-// API: Health check
-app.get('/api/health', (req, res) => {
-  res.json({ status: 'ok', uptime: process.uptime() });
-});
+// Persistent data directory
+const DATA_DIR = path.join(process.cwd(), 'data');
+const SCHEDULE_FILE = path.join(DATA_DIR, 'schedule_overrides.json');
+const SECRETS_FILE = path.join(DATA_DIR, '.credentials.json');
+const TAKEDOWNS_FILE = path.join(DATA_DIR, 'takedowns.json');
 
-// Admin and practice credentials (configurable via environment variables)
-const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || 'pogodipesmu2026';
-const PRACTICE_PASSWORD = process.env.PRACTICE_PASSWORD || 'trening2026';
+if (!fs.existsSync(DATA_DIR)) {
+  fs.mkdirSync(DATA_DIR, { recursive: true });
+}
+
+// Secure credentials initialization:
+// 1. Checks process.env.ADMIN_PASSWORD / process.env.PRACTICE_PASSWORD
+// 2. Or loads/generates high-entropy random secrets in data/.credentials.json
+// Never uses trivial hardcoded passwords in production!
+interface StoredCredentials {
+  adminPassword: string;
+  practicePassword: string;
+  generatedAt: string;
+}
+
+function getOrGenerateCredentials(): { adminPass: string; practicePass: string } {
+  let stored: StoredCredentials | null = null;
+
+  try {
+    if (fs.existsSync(SECRETS_FILE)) {
+      stored = JSON.parse(fs.readFileSync(SECRETS_FILE, 'utf-8'));
+    }
+  } catch (e) {
+    console.error('[SECURITY] Error reading credentials file:', e);
+  }
+
+  if (!stored || !stored.adminPassword || !stored.practicePassword) {
+    // Generate high-entropy 24-char secrets
+    stored = {
+      adminPassword: `Adm#${crypto.randomBytes(9).toString('base64url')}!`,
+      practicePassword: `Trn#${crypto.randomBytes(9).toString('base64url')}!`,
+      generatedAt: new Date().toISOString()
+    };
+    try {
+      fs.writeFileSync(SECRETS_FILE, JSON.stringify(stored, null, 2), { mode: 0o600 });
+      console.log('[SECURITY] Generated new secure credentials in data/.credentials.json');
+    } catch (e) {
+      console.error('[SECURITY] Could not persist credentials file:', e);
+    }
+  }
+
+  const adminPass = process.env.ADMIN_PASSWORD || stored.adminPassword;
+  const practicePass = process.env.PRACTICE_PASSWORD || stored.practicePassword;
+
+  return { adminPass, practicePass };
+}
+
+const { adminPass: ADMIN_PASSWORD, practicePass: PRACTICE_PASSWORD } = getOrGenerateCredentials();
+
+console.log('[SECURITY] Auth credentials initialized successfully.');
+console.log(`[SECURITY] Admin access: ${process.env.ADMIN_PASSWORD ? 'Configured via ADMIN_PASSWORD environment variable' : 'Configured via persistent server secret'}`);
+console.log(`[SECURITY] Practice access: ${process.env.PRACTICE_PASSWORD ? 'Configured via PRACTICE_PASSWORD environment variable' : 'Configured via persistent server secret'}`);
+
+// Rate-limiting & Brute Force Protection
+interface AuthAttemptRecord {
+  failedAttempts: number;
+  firstAttemptTime: number;
+  blockedUntil: number;
+}
+
+const authAttempts = new Map<string, AuthAttemptRecord>();
+const MAX_FAILED_ATTEMPTS = 5;
+const LOCKOUT_DURATION_MS = 15 * 60 * 1000; // 15 minutes lockout
+
+function getClientIp(req: express.Request): string {
+  const forwarded = req.headers['x-forwarded-for'];
+  if (typeof forwarded === 'string') {
+    return forwarded.split(',')[0].trim();
+  }
+  return req.ip || req.socket.remoteAddress || 'unknown';
+}
+
+function checkRateLimit(ip: string): { blocked: boolean; remainingMinutes?: number } {
+  const now = Date.now();
+  const record = authAttempts.get(ip);
+  if (!record) return { blocked: false };
+
+  if (record.blockedUntil > now) {
+    const remainingMinutes = Math.ceil((record.blockedUntil - now) / 60000);
+    return { blocked: true, remainingMinutes };
+  }
+
+  // If lockout or window expired (30 min), reset
+  if (now - record.firstAttemptTime > 30 * 60 * 1000) {
+    authAttempts.delete(ip);
+    return { blocked: false };
+  }
+
+  return { blocked: false };
+}
+
+function recordFailedAttempt(ip: string): void {
+  const now = Date.now();
+  const record = authAttempts.get(ip) || { failedAttempts: 0, firstAttemptTime: now, blockedUntil: 0 };
+  record.failedAttempts += 1;
+
+  if (record.failedAttempts >= MAX_FAILED_ATTEMPTS) {
+    record.blockedUntil = now + LOCKOUT_DURATION_MS;
+    console.warn(`[SECURITY] IP ${ip} privremeno blokiran na 15 minuta zbog ${record.failedAttempts} neuspelih pokušaja!`);
+  }
+  authAttempts.set(ip, record);
+}
+
+function recordSuccessfulAttempt(ip: string): void {
+  authAttempts.delete(ip);
+}
+
+// Constant-time string comparison to prevent timing attacks
+function safeStringCompare(a?: string, b?: string): boolean {
+  if (typeof a !== 'string' || typeof b !== 'string') return false;
+  const bufA = Buffer.from(a);
+  const bufB = Buffer.from(b);
+  if (bufA.length !== bufB.length) {
+    // Perform dummy timing
+    crypto.timingSafeEqual(bufA, bufA);
+    return false;
+  }
+  return crypto.timingSafeEqual(bufA, bufB);
+}
 
 // Ephemeral server-side secret for admin session tokens
-const ADMIN_TOKEN_SECRET = Buffer.from(Date.now().toString() + '_' + Math.random().toString(36)).toString('base64');
+const ADMIN_TOKEN_SECRET = crypto.randomBytes(32).toString('base64');
 function getValidAdminToken(): string {
-  // Simple deterministic token based on current admin password & boot secret
-  return Buffer.from(`${ADMIN_PASSWORD}:${ADMIN_TOKEN_SECRET}`).toString('base64');
+  return crypto.createHmac('sha256', ADMIN_TOKEN_SECRET).update(ADMIN_PASSWORD).digest('hex');
 }
 
 function isAuthorizedAdmin(req: express.Request): boolean {
@@ -33,19 +149,16 @@ function isAuthorizedAdmin(req: express.Request): boolean {
   const rawPassword = req.body?.password;
 
   const validToken = getValidAdminToken();
-  if (bearerToken && bearerToken === validToken) return true;
-  if (bodyToken && bodyToken === validToken) return true;
-  if (rawPassword && rawPassword === ADMIN_PASSWORD) return true;
+  if (bearerToken && safeStringCompare(bearerToken, validToken)) return true;
+  if (bodyToken && safeStringCompare(bodyToken, validToken)) return true;
+  if (rawPassword && safeStringCompare(rawPassword, ADMIN_PASSWORD)) return true;
   return false;
 }
 
-// Persistent schedule overrides file
-const DATA_DIR = path.join(process.cwd(), 'data');
-const SCHEDULE_FILE = path.join(DATA_DIR, 'schedule_overrides.json');
-
-if (!fs.existsSync(DATA_DIR)) {
-  fs.mkdirSync(DATA_DIR, { recursive: true });
-}
+// API: Health check
+app.get('/api/health', (req, res) => {
+  res.json({ status: 'ok', uptime: process.uptime() });
+});
 
 function loadScheduleOverrides(): Record<string, string> {
   try {
@@ -460,32 +573,104 @@ app.get('/api/schedule', (req, res) => {
   res.json({ overrides });
 });
 
-// API: Verify admin password
+// API: Verify admin password with brute-force protection
 app.post('/api/admin/verify', (req, res) => {
+  const ip = getClientIp(req);
+  const rateCheck = checkRateLimit(ip);
+  if (rateCheck.blocked) {
+    res.status(429).json({ 
+      success: false, 
+      error: `Previše neuspelih pokušaja sa ove IP adrese. Pristup je privremeno blokiran (još ${rateCheck.remainingMinutes} min).` 
+    });
+    return;
+  }
+
   const { password } = req.body || {};
-  if (password === ADMIN_PASSWORD) {
+  if (safeStringCompare(password, ADMIN_PASSWORD)) {
+    recordSuccessfulAttempt(ip);
     res.json({ success: true, authorized: true, token: getValidAdminToken() });
   } else {
+    recordFailedAttempt(ip);
     res.status(401).json({ success: false, error: 'Pogrešna lozinka' });
   }
 });
 
-// API: Verify practice mode password
+// API: Verify practice mode password with brute-force protection
 app.post('/api/practice/verify', (req, res) => {
+  const ip = getClientIp(req);
+  const rateCheck = checkRateLimit(ip);
+  if (rateCheck.blocked) {
+    res.status(429).json({ 
+      success: false, 
+      error: `Previše neuspelih pokušaja sa ove IP adrese. Pristup je privremeno blokiran (još ${rateCheck.remainingMinutes} min).` 
+    });
+    return;
+  }
+
   const { password } = req.body || {};
-  if (password === PRACTICE_PASSWORD) {
+  if (safeStringCompare(password, PRACTICE_PASSWORD)) {
+    recordSuccessfulAttempt(ip);
     res.json({ success: true, authorized: true });
   } else {
+    recordFailedAttempt(ip);
     res.status(401).json({ success: false, error: 'Pogrešna šifra za trening' });
   }
 });
 
+// API: Copyright Notice & Takedown Request
+app.post('/api/takedown', (req, res) => {
+  const { claimantName, email, songInfo, proofUrl, notes } = req.body || {};
+
+  if (!email || !songInfo) {
+    res.status(400).json({ error: 'Morate navesti email adresu i podatke o pesmi.' });
+    return;
+  }
+
+  const takedownRecord = {
+    id: `tk_${Date.now()}_${crypto.randomBytes(4).toString('hex')}`,
+    receivedAt: new Date().toISOString(),
+    claimantName: (claimantName || 'Anonimno').slice(0, 100),
+    email: email.slice(0, 150),
+    songInfo: songInfo.slice(0, 300),
+    proofUrl: (proofUrl || '').slice(0, 500),
+    notes: (notes || '').slice(0, 1000),
+    status: 'received'
+  };
+
+  try {
+    let list: any[] = [];
+    if (fs.existsSync(TAKEDOWNS_FILE)) {
+      list = JSON.parse(fs.readFileSync(TAKEDOWNS_FILE, 'utf-8'));
+    }
+    list.push(takedownRecord);
+    fs.writeFileSync(TAKEDOWNS_FILE, JSON.stringify(list, null, 2));
+    console.log(`[TAKEDOWN] Primljen zahtev za uklanjanje #${takedownRecord.id}: ${songInfo} od ${email}`);
+  } catch (err) {
+    console.error('[TAKEDOWN] Greška pri čuvanju zahteva:', err);
+  }
+
+  res.json({
+    success: true,
+    ticketId: takedownRecord.id,
+    message: 'Vaš zahtev za uklanjanje pesme je uspešno zaprimljen. Sporni sadržaj se pregleda i uklanja u roku od 24 sata.'
+  });
+});
+
 // API: Admin update schedule override (applies immediately to all players)
 app.post('/api/admin/schedule', (req, res) => {
+  const ip = getClientIp(req);
+  const rateCheck = checkRateLimit(ip);
+  if (rateCheck.blocked) {
+    res.status(429).json({ error: 'Previše neuspelih zahteva. Pristup je privremeno blokiran.' });
+    return;
+  }
+
   if (!isAuthorizedAdmin(req)) {
+    recordFailedAttempt(ip);
     res.status(401).json({ error: 'Neautorizovan pristup' });
     return;
   }
+  recordSuccessfulAttempt(ip);
 
   const { dateStr, category, songId } = req.body || {};
 
@@ -505,10 +690,19 @@ app.post('/api/admin/schedule', (req, res) => {
 
 // API: Admin delete schedule override (reverts to algorithmic daily song for all players)
 app.delete('/api/admin/schedule', (req, res) => {
+  const ip = getClientIp(req);
+  const rateCheck = checkRateLimit(ip);
+  if (rateCheck.blocked) {
+    res.status(429).json({ error: 'Previše neuspelih zahteva. Pristup je privremeno blokiran.' });
+    return;
+  }
+
   if (!isAuthorizedAdmin(req)) {
+    recordFailedAttempt(ip);
     res.status(401).json({ error: 'Neautorizovan pristup' });
     return;
   }
+  recordSuccessfulAttempt(ip);
 
   const { dateStr, category } = req.body || {};
 

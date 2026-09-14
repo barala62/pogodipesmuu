@@ -33,8 +33,8 @@ import {
   normalizeText 
 } from '../data/songs/balkanSongs';
 
-const ADMIN_SECRET = 'pogodipesmu2026';
 const ADMIN_AUTH_KEY = 'balkan_admin_auth_token';
+const ADMIN_TOKEN_KEY = 'balkan_admin_session_token';
 
 interface CatalogScheduleModalProps {
   isOpen: boolean;
@@ -107,6 +107,10 @@ export const CatalogScheduleModal: React.FC<CatalogScheduleModalProps> = ({
       });
 
       if (res.ok) {
+        const data = await res.json() as { token?: string };
+        if (data.token) {
+          sessionStorage.setItem(ADMIN_TOKEN_KEY, data.token);
+        }
         sessionStorage.setItem(ADMIN_AUTH_KEY, 'true');
         setIsAuthenticated(true);
         setPasswordInput('');
@@ -114,23 +118,10 @@ export const CatalogScheduleModal: React.FC<CatalogScheduleModalProps> = ({
         await syncServerSchedule();
         setOverridesVersion(v => v + 1);
       } else {
-        // Fallback local check
-        if (passwordInput.trim() === ADMIN_SECRET) {
-          sessionStorage.setItem(ADMIN_AUTH_KEY, 'true');
-          setIsAuthenticated(true);
-          setPasswordInput('');
-        } else {
-          setAuthError('Pogrešna lozinka. Pokušajte ponovo.');
-        }
-      }
-    } catch {
-      if (passwordInput.trim() === ADMIN_SECRET) {
-        sessionStorage.setItem(ADMIN_AUTH_KEY, 'true');
-        setIsAuthenticated(true);
-        setPasswordInput('');
-      } else {
         setAuthError('Pogrešna lozinka. Pokušajte ponovo.');
       }
+    } catch {
+      setAuthError('Greška pri povezivanju sa serverom. Pokušajte ponovo.');
     } finally {
       setIsVerifying(false);
     }
@@ -138,6 +129,7 @@ export const CatalogScheduleModal: React.FC<CatalogScheduleModalProps> = ({
 
   const handleLogout = () => {
     sessionStorage.removeItem(ADMIN_AUTH_KEY);
+    sessionStorage.removeItem(ADMIN_TOKEN_KEY);
     setIsAuthenticated(false);
     setPasswordInput('');
   };
@@ -278,11 +270,15 @@ export const CatalogScheduleModal: React.FC<CatalogScheduleModalProps> = ({
     resetGameStateForCategory(targetCat, targetDateStr);
 
     try {
+      const token = sessionStorage.getItem(ADMIN_TOKEN_KEY) || '';
       const res = await fetch('/api/admin/schedule', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
         body: JSON.stringify({
-          password: ADMIN_SECRET,
+          token,
           dateStr: targetDateStr,
           category: targetCat,
           songId
@@ -322,11 +318,15 @@ export const CatalogScheduleModal: React.FC<CatalogScheduleModalProps> = ({
     resetGameStateForCategory(targetCat, dateStr);
 
     try {
+      const token = sessionStorage.getItem(ADMIN_TOKEN_KEY) || '';
       const res = await fetch('/api/admin/schedule', {
         method: 'DELETE',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
         body: JSON.stringify({
-          password: ADMIN_SECRET,
+          token,
           dateStr,
           category: targetCat
         })
@@ -365,11 +365,15 @@ export const CatalogScheduleModal: React.FC<CatalogScheduleModalProps> = ({
     resetGameStateForCategory(targetCat, dateStr);
 
     try {
+      const token = sessionStorage.getItem(ADMIN_TOKEN_KEY) || '';
       const res = await fetch('/api/admin/schedule', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
         body: JSON.stringify({
-          password: ADMIN_SECRET,
+          token,
           dateStr,
           category: targetCat,
           songId: rand.id

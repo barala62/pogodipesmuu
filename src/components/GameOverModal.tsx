@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import confetti from 'canvas-confetti';
-import { Share2, Check, X, Disc3, Play, Pause, RotateCw, Sparkles, Flame } from 'lucide-react';
+import { Share2, Check, X, Disc3, Play, Pause, RotateCw, Sparkles, Flame, ExternalLink, Music2 } from 'lucide-react';
 import { Song, GuessAttempt, GameCategory, SongPreviewResponse, UserStats } from '../types';
 import { getDayNumber } from '../utils/storage';
 import { CATEGORIES } from '../data/songs/balkanSongs';
@@ -214,6 +214,55 @@ export const GameOverModal: React.FC<GameOverModalProps> = ({
             </>
           )}
         </button>
+
+        {/* Listen on Licensed Streaming Services (Spotify, Apple Music, YouTube) */}
+        <div className="bg-white/[0.03] border border-white/10 rounded-xl p-3 space-y-2">
+          <div className="flex items-center justify-between text-[11px] text-zinc-400 font-medium">
+            <span className="flex items-center gap-1.5 text-zinc-300">
+              <Music2 className="w-3.5 h-3.5 text-emerald-400" />
+              <span>Podrži izvođača — Slušaj celu pesmu:</span>
+            </span>
+            <span className="text-[10px] text-zinc-500">Zvanični servisi</span>
+          </div>
+
+          <div className="grid grid-cols-3 gap-2">
+            {/* Spotify */}
+            <a
+              id="link-listen-spotify"
+              href={`https://open.spotify.com/search/${encodeURIComponent(`${targetSong.artist} ${targetSong.title}`)}`}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="py-2 px-2.5 rounded-lg bg-[#1DB954]/10 hover:bg-[#1DB954]/20 border border-[#1DB954]/20 text-[#1DB954] hover:text-white transition-colors flex items-center justify-center gap-1.5 text-xs font-semibold text-center group"
+            >
+              <span>Spotify</span>
+              <ExternalLink className="w-3 h-3 opacity-70 group-hover:opacity-100" />
+            </a>
+
+            {/* Apple Music */}
+            <a
+              id="link-listen-apple"
+              href={`https://music.apple.com/search?term=${encodeURIComponent(`${targetSong.artist} ${targetSong.title}`)}`}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="py-2 px-2.5 rounded-lg bg-[#FA243C]/10 hover:bg-[#FA243C]/20 border border-[#FA243C]/20 text-[#FA243C] hover:text-white transition-colors flex items-center justify-center gap-1.5 text-xs font-semibold text-center group"
+            >
+              <span>Apple Music</span>
+              <ExternalLink className="w-3 h-3 opacity-70 group-hover:opacity-100" />
+            </a>
+
+            {/* YouTube */}
+            <a
+              id="link-listen-youtube"
+              href={`https://www.youtube.com/results?search_query=${encodeURIComponent(`${targetSong.artist} ${targetSong.title}`)}`}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="py-2 px-2.5 rounded-lg bg-[#FF0000]/10 hover:bg-[#FF0000]/20 border border-[#FF0000]/20 text-[#FF4E4E] hover:text-white transition-colors flex items-center justify-center gap-1.5 text-xs font-semibold text-center group"
+            >
+              <span>YouTube</span>
+              <ExternalLink className="w-3 h-3 opacity-70 group-hover:opacity-100" />
+            </a>
+          </div>
+        </div>
 
         {/* Share Result Button with Emoji Matrix */}
         <div className="space-y-2">

@@ -42,7 +42,7 @@ export const PracticeAuthModal: React.FC<PracticeAuthModalProps> = ({
     setError('');
 
     try {
-      // Check via server endpoint first
+      // Check via server endpoint
       const res = await fetch('/api/practice/verify', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -57,30 +57,10 @@ export const PracticeAuthModal: React.FC<PracticeAuthModalProps> = ({
           onClose();
         }, 600);
       } else {
-        // Fallback local check
-        if (password.trim() === 'trening2026') {
-          sessionStorage.setItem('balkan_practice_unlocked', 'true');
-          setShowSuccessToast(true);
-          setTimeout(() => {
-            onSuccess();
-            onClose();
-          }, 600);
-        } else {
-          setError('Pogrešna šifra za Trening. Pokušajte ponovo.');
-        }
-      }
-    } catch {
-      // Offline / network fallback
-      if (password.trim() === 'trening2026') {
-        sessionStorage.setItem('balkan_practice_unlocked', 'true');
-        setShowSuccessToast(true);
-        setTimeout(() => {
-          onSuccess();
-          onClose();
-        }, 600);
-      } else {
         setError('Pogrešna šifra za Trening. Pokušajte ponovo.');
       }
+    } catch {
+      setError('Greška pri proveri šifre. Proverite internet konekciju i pokušajte ponovo.');
     } finally {
       setIsLoading(false);
     }

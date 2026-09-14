@@ -1,10 +1,30 @@
 import React from 'react';
-import { HelpCircle, BarChart2, Layers, Smartphone, Tablet, Laptop, Heart, Music2, ShieldCheck, Lock, Dumbbell } from 'lucide-react';
+import { 
+  HelpCircle, 
+  BarChart2, 
+  Layers, 
+  Smartphone, 
+  Tablet, 
+  Laptop, 
+  Heart, 
+  Music2, 
+  ShieldCheck, 
+  Lock, 
+  Dumbbell, 
+  FileText, 
+  ShieldAlert, 
+  Cookie, 
+  Mail 
+} from 'lucide-react';
 
 interface FooterProps {
   onOpenHelp: () => void;
   onOpenStats: () => void;
   onOpenCategory: () => void;
+  onOpenPrivacy?: () => void;
+  onOpenTerms?: () => void;
+  onOpenTakedown?: () => void;
+  onOpenCookieSettings?: () => void;
   onAdminTrigger?: () => void;
   onPracticeTrigger?: () => void;
 }
@@ -13,6 +33,10 @@ export const Footer: React.FC<FooterProps> = ({
   onOpenHelp,
   onOpenStats,
   onOpenCategory,
+  onOpenPrivacy,
+  onOpenTerms,
+  onOpenTakedown,
+  onOpenCookieSettings,
   onAdminTrigger,
   onPracticeTrigger,
 }) => {
@@ -82,13 +106,79 @@ export const Footer: React.FC<FooterProps> = ({
           </div>
         </div>
 
-        {/* Bottom: Music Fair Use Disclaimer & Copyright */}
-        <div className="space-y-2 text-[11px] text-zinc-500 text-center sm:text-left leading-relaxed">
-          <p>
-            Ova web aplikacija je besplatna muzička igra inspirisana prepoznavanjem pesama. Kratki zvučni isečci (do 30 sekundi) koriste se u svrhu edukativno-zabavnog kviza i promocije domaće muzike. Sva autorska prava i muzička vlasništva pripadaju originalnim izvođačima, autorima i diskografskim kućama.
-          </p>
-          <div className="flex flex-col sm:flex-row items-center justify-between gap-2 pt-2 border-t border-white/5 text-zinc-500">
-            <p>© {currentYear} Pogodi Pesmu. Napravljeno sa strašću za muziku.</p>
+        {/* Comprehensive Legal Disclaimer & Fair Use Notice */}
+        <div className="space-y-3 text-[11px] text-zinc-500 text-center sm:text-left leading-relaxed">
+          <div className="p-3.5 rounded-xl bg-white/[0.02] border border-white/5 space-y-2">
+            <div className="font-semibold text-zinc-400 flex items-center justify-center sm:justify-start gap-2">
+              <ShieldCheck className="w-3.5 h-3.5 text-emerald-400" />
+              <span>Pravna napomena o autorskim pravima i promotivnom karakteru (Fair Use)</span>
+            </div>
+            <p>
+              Ova web aplikacija je neprofitni promotivno-zabavni fan projekat posvećen popularizaciji muzike sa prostora bivše Jugoslavije. Svi zvučni isečci (do 30 sekundi) strimuju se direktno i u realnom vremenu sa zvaničnih promotivnih CDN servera nosilaca licenci (Deezer i Apple Music API). Sajt <strong>ne hostuje, ne skladišti, ne konvertuje i ne distribuira</strong> muzičke fajlove na svom serveru.
+            </p>
+            <p>
+              Sva autorska, izvođačka i srodna prava nad pesmama, tekstovima, nazivima i omotima pripadaju njihovim autorima, kompozitorima, izvođačima i diskografskim kućama (Croatia Records, PGP RTS, Grand Production, IDJTunes, Jugoton i drugi) i organizacijama za zaštitu prava (SOKOJ, ZAMP, PAM, OFPS). Nakon svake igre pružamo direktne linkove za slušanje cele pesme na licenciranim platformama (Spotify, Apple Music, YouTube).
+            </p>
+          </div>
+
+          {/* Legal Navigation Links: Privacy Policy, Terms, Takedown, Cookie Settings */}
+          <div className="flex flex-wrap items-center justify-center sm:justify-start gap-x-4 gap-y-2 pt-1 text-zinc-400">
+            {onOpenPrivacy && (
+              <button
+                id="footer-link-privacy"
+                onClick={onOpenPrivacy}
+                className="hover:text-emerald-400 transition-colors flex items-center gap-1"
+              >
+                <Lock className="w-3 h-3 text-emerald-400" />
+                <span>Politika privatnosti</span>
+              </button>
+            )}
+
+            {onOpenTerms && (
+              <button
+                id="footer-link-terms"
+                onClick={onOpenTerms}
+                className="hover:text-emerald-400 transition-colors flex items-center gap-1"
+              >
+                <FileText className="w-3 h-3 text-emerald-400" />
+                <span>Uslovi korišćenja</span>
+              </button>
+            )}
+
+            {onOpenTakedown && (
+              <button
+                id="footer-link-takedown"
+                onClick={onOpenTakedown}
+                className="hover:text-red-400 transition-colors flex items-center gap-1 text-red-400/90 font-medium"
+              >
+                <ShieldAlert className="w-3 h-3" />
+                <span>Prijavi pesmu / DMCA Takedown</span>
+              </button>
+            )}
+
+            {onOpenCookieSettings && (
+              <button
+                id="footer-link-cookies"
+                onClick={onOpenCookieSettings}
+                className="hover:text-amber-400 transition-colors flex items-center gap-1"
+              >
+                <Cookie className="w-3 h-3 text-amber-400" />
+                <span>Kolačići (GDPR)</span>
+              </button>
+            )}
+
+            <a
+              href="mailto:kontakt@pogodipesmu.com"
+              className="hover:text-zinc-200 transition-colors flex items-center gap-1 text-zinc-500"
+            >
+              <Mail className="w-3 h-3" />
+              <span>kontakt@pogodipesmu.com</span>
+            </a>
+          </div>
+
+          {/* Bottom Copyright bar */}
+          <div className="flex flex-col sm:flex-row items-center justify-between gap-2 pt-3 border-t border-white/5 text-zinc-500">
+            <p>© {currentYear} Pogodi Pesmu. Sva prava zadržana od strane nosilaca autorskih prava.</p>
             <div className="flex items-center gap-2">
               <span>Balkanski hitovi svakog dana u ponoć</span>
               {onPracticeTrigger && (
@@ -119,3 +209,4 @@ export const Footer: React.FC<FooterProps> = ({
     </footer>
   );
 };
+

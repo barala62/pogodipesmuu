@@ -9,6 +9,9 @@ import { HelpModal } from './components/HelpModal';
 import { CategoryModal } from './components/CategoryModal';
 import { CatalogScheduleModal } from './components/CatalogScheduleModal';
 import { PracticeAuthModal } from './components/PracticeAuthModal';
+import { LegalModal } from './components/LegalModal';
+import { TakedownModal } from './components/TakedownModal';
+import { CookieConsentBanner } from './components/CookieConsentBanner';
 
 import {
   Song,
@@ -77,6 +80,9 @@ export default function App() {
   const [showGameOverModal, setShowGameOverModal] = useState<boolean>(false);
   const [showCatalogModal, setShowCatalogModal] = useState<boolean>(false);
   const [showPracticeAuthModal, setShowPracticeAuthModal] = useState<boolean>(false);
+  const [showLegalModal, setShowLegalModal] = useState<boolean>(false);
+  const [legalTab, setLegalTab] = useState<'privacy' | 'terms'>('privacy');
+  const [showTakedownModal, setShowTakedownModal] = useState<boolean>(false);
   const [isPracticeUnlocked, setIsPracticeUnlocked] = useState<boolean>(() => {
     if (typeof window !== 'undefined') {
       return sessionStorage.getItem('balkan_practice_unlocked') === 'true';
@@ -543,6 +549,19 @@ export default function App() {
         onOpenHelp={() => setShowHelpModal(true)}
         onOpenStats={() => setShowStatsModal(true)}
         onOpenCategory={() => setShowCategoryModal(true)}
+        onOpenPrivacy={() => {
+          setLegalTab('privacy');
+          setShowLegalModal(true);
+        }}
+        onOpenTerms={() => {
+          setLegalTab('terms');
+          setShowLegalModal(true);
+        }}
+        onOpenTakedown={() => setShowTakedownModal(true)}
+        onOpenCookieSettings={() => {
+          setLegalTab('privacy');
+          setShowLegalModal(true);
+        }}
         onAdminTrigger={() => setShowCatalogModal(true)}
         onPracticeTrigger={() => {
           if (isPracticeUnlocked) {
@@ -550,6 +569,14 @@ export default function App() {
           } else {
             setShowPracticeAuthModal(true);
           }
+        }}
+      />
+
+      {/* Cookie Consent Banner for AdSense & GDPR compliance */}
+      <CookieConsentBanner
+        onOpenPrivacyPolicy={() => {
+          setLegalTab('privacy');
+          setShowLegalModal(true);
         }}
       />
 
@@ -628,6 +655,19 @@ export default function App() {
           }
         }}
         onClose={() => setShowPracticeAuthModal(false)}
+      />
+
+      <LegalModal
+        isOpen={showLegalModal}
+        initialTab={legalTab}
+        onClose={() => setShowLegalModal(false)}
+      />
+
+      <TakedownModal
+        isOpen={showTakedownModal}
+        prefilledSongTitle={targetSong?.title}
+        prefilledArtist={targetSong?.artist}
+        onClose={() => setShowTakedownModal(false)}
       />
 
       {showConfetti && (

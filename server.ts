@@ -180,8 +180,6 @@ function saveScheduleOverrides(overrides: Record<string, string>): void {
   }
 }
 
-import { Readable } from 'node:stream';
-
 // In-memory cache for resolved previews with TTL (2 hours)
 interface CachedPreview {
   data: SongPreviewResponse;
@@ -189,6 +187,19 @@ interface CachedPreview {
 }
 const previewCache = new Map<string, CachedPreview>();
 const CACHE_TTL_MS = 2 * 60 * 60 * 1000; // 2 hours
+
+// Helper to remove Balkan diacritics for fallback search queries
+function stripBalkanDiacritics(str: string): string {
+  return str
+    .replace(/[čć]/g, 'c')
+    .replace(/đ/g, 'dj')
+    .replace(/š/g, 's')
+    .replace(/ž/g, 'z')
+    .replace(/[ČĆ]/g, 'C')
+    .replace(/Đ/g, 'Dj')
+    .replace(/Š/g, 'S')
+    .replace(/Ž/g, 'Z');
+}
 
 // Clean query terms for search engines
 function sanitizeSearchQuery(str: string): string {
@@ -291,22 +302,26 @@ function getCandidateQueries(song: Song): string[] {
   
   if (song.previewQuery) {
     queries.push(sanitizeSearchQuery(song.previewQuery));
+    queries.push(sanitizeSearchQuery(stripBalkanDiacritics(song.previewQuery)));
   }
   
   // Artist + Title
   queries.push(sanitizeSearchQuery(`${song.artist} ${song.title}`));
+  queries.push(sanitizeSearchQuery(stripBalkanDiacritics(`${song.artist} ${song.title}`)));
   
   // First main artist + Title (split & or feat)
   const mainArtist = song.artist.split(/&|,|feat\.|ft\./i)[0].trim();
   if (mainArtist !== song.artist) {
     queries.push(sanitizeSearchQuery(`${mainArtist} ${song.title}`));
+    queries.push(sanitizeSearchQuery(stripBalkanDiacritics(`${mainArtist} ${song.title}`)));
   }
   
   // Title + Artist
   queries.push(sanitizeSearchQuery(`${song.title} ${mainArtist}`));
+  queries.push(sanitizeSearchQuery(stripBalkanDiacritics(`${song.title} ${mainArtist}`)));
 
   // Unique list
-  return Array.from(new Set(queries));
+  return Array.from(new Set(queries.filter(Boolean)));
 }
 
 // Fetch and score candidates from Deezer API
@@ -429,53 +444,47 @@ app.get('/api/proxy/audio', async (req, res) => {
       return;
     }
 
-    const rangeHeader = req.headers.range;
     const forwardHeaders: Record<string, string> = {
       'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)'
     };
-    if (rangeHeader) {
-      forwardHeaders['Range'] = rangeHeader;
-    }
 
     const audioRes = await fetch(audioUrl, { headers: forwardHeaders });
-    if (!audioRes.ok && audioRes.status !== 206) {
+    if (!audioRes.ok) {
       res.status(audioRes.status).send('Failed to fetch upstream audio');
       return;
     }
 
-    res.status(audioRes.status);
     const contentType = audioRes.headers.get('content-type') || 'audio/mpeg';
-    const contentLength = audioRes.headers.get('content-length');
-    const contentRange = audioRes.headers.get('content-range');
-    const acceptRanges = audioRes.headers.get('accept-ranges') || 'bytes';
+    const arrayBuffer = await audioRes.arrayBuffer();
+    const fullBuffer = Buffer.from(arrayBuffer);
+    const totalSize = fullBuffer.length;
 
     res.setHeader('Content-Type', contentType);
-    res.setHeader('Accept-Ranges', acceptRanges);
+    res.setHeader('Accept-Ranges', 'bytes');
     res.setHeader('Cache-Control', 'public, max-age=86400');
     res.setHeader('Access-Control-Allow-Origin', '*');
+    res.setHeader('Access-Control-Allow-Methods', 'GET, HEAD, OPTIONS');
 
-    if (contentLength) res.setHeader('Content-Length', contentLength);
-    if (contentRange) res.setHeader('Content-Range', contentRange);
+    const rangeHeader = req.headers.range;
+    if (rangeHeader && rangeHeader.startsWith('bytes=')) {
+      const parts = rangeHeader.replace(/bytes=/, '').split('-');
+      const start = parseInt(parts[0], 10) || 0;
+      const end = parts[1] ? parseInt(parts[1], 10) : totalSize - 1;
 
-    if (audioRes.body) {
-      // Pipe stream cleanly to client response, handling client aborts without crash
-      try {
-        // @ts-ignore Web ReadableStream to Node Readable
-        const nodeStream = Readable.fromWeb(audioRes.body);
-        nodeStream.on('error', (err) => {
-          console.warn('Upstream audio stream error:', err.message);
-        });
-        req.on('close', () => {
-          nodeStream.destroy();
-        });
-        nodeStream.pipe(res);
-      } catch (streamErr) {
-        const buffer = await audioRes.arrayBuffer();
-        res.send(Buffer.from(buffer));
+      if (start >= totalSize || end >= totalSize || start > end) {
+        res.status(416).setHeader('Content-Range', `bytes */${totalSize}`).send('Requested Range Not Satisfiable');
+        return;
       }
+
+      const chunk = fullBuffer.subarray(start, end + 1);
+      res.status(206);
+      res.setHeader('Content-Range', `bytes ${start}-${end}/${totalSize}`);
+      res.setHeader('Content-Length', chunk.length);
+      res.send(chunk);
     } else {
-      const buffer = await audioRes.arrayBuffer();
-      res.send(Buffer.from(buffer));
+      res.status(200);
+      res.setHeader('Content-Length', totalSize);
+      res.send(fullBuffer);
     }
   } catch (err) {
     console.error('Audio proxy error:', err);

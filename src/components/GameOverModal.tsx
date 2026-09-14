@@ -1,8 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import confetti from 'canvas-confetti';
-import { Share2, Check, X, Disc3, Play, Pause, RotateCw, Sparkles, Flame, ExternalLink, Music2 } from 'lucide-react';
+import { Share2, Check, X, Disc3, Play, Pause, RotateCw, Sparkles, Flame, ExternalLink, Music2, ArrowRight } from 'lucide-react';
 import { Song, GuessAttempt, GameCategory, SongPreviewResponse, UserStats } from '../types';
-import { getDayNumber } from '../utils/storage';
 import { CATEGORIES } from '../data/songs/balkanSongs';
 
 interface GameOverModalProps {
@@ -17,6 +16,7 @@ interface GameOverModalProps {
   userStats?: UserStats;
   onPlayFullAudio: () => void;
   onNextPracticeSong?: () => void;
+  onSelectNextCategory?: (category: GameCategory) => void;
   onClose: () => void;
 }
 
@@ -28,10 +28,11 @@ export const GameOverModal: React.FC<GameOverModalProps> = ({
   previewData,
   isPlayingFullAudio,
   category,
-  dateStr,
+  dateStr: _dateStr,
   userStats,
   onPlayFullAudio,
   onNextPracticeSong,
+  onSelectNextCategory,
   onClose,
 }) => {
   const [copied, setCopied] = useState(false);
@@ -54,10 +55,17 @@ export const GameOverModal: React.FC<GameOverModalProps> = ({
 
   if (!isOpen) return null;
 
-  const dayNum = getDayNumber(dateStr);
   const categoryInfo = CATEGORIES.find(c => c.id === category);
 
-  // Build Emoji Matrix for sharing
+  // Next category in sequence
+  const DAILY_CATEGORIES: GameCategory[] = ['daily-mix', 'moderno', 'ex-yu', 'narodna'];
+  const currentDailyIndex = DAILY_CATEGORIES.indexOf(category);
+  const nextCategoryId: GameCategory = currentDailyIndex >= 0
+    ? DAILY_CATEGORIES[(currentDailyIndex + 1) % DAILY_CATEGORIES.length]
+    : 'daily-mix';
+  const nextCategoryInfo = CATEGORIES.find(c => c.id === nextCategoryId);
+
+  // Build Emoji Matrix for sharing without song number
   const generateShareText = () => {
     const emojis = attempts.map(att => {
       if (att.status === 'correct') return '🟩';
@@ -74,7 +82,7 @@ export const GameOverModal: React.FC<GameOverModalProps> = ({
     const scoreStr = isWon ? `${attempts.length}/6` : 'X/6';
     const categoryName = categoryInfo?.name || 'Dnevni Izazov';
 
-    return `Pogodi Pesmu (#${dayNum} - ${categoryName})\n🔊 ${emojis.join('')} ${scoreStr}\nIgraj i ti: ${window.location.origin}`;
+    return `Pogodi Pesmu - ${categoryName}\n🔊 ${emojis.join('')} ${scoreStr}\nIgraj i ti: ${window.location.origin}`;
   };
 
   const handleShare = async () => {
@@ -279,7 +287,7 @@ export const GameOverModal: React.FC<GameOverModalProps> = ({
             ) : (
               <>
                 <Share2 className="w-4 h-4" />
-                <span>Podeli rezultat (Emoji)</span>
+                <span>Podeli rezultat</span>
               </>
             )}
           </button>
@@ -296,6 +304,18 @@ export const GameOverModal: React.FC<GameOverModalProps> = ({
             ))}
           </div>
         </div>
+
+        {/* Switch to Next Category Button */}
+        {onSelectNextCategory && nextCategoryInfo && (
+          <button
+            id="btn-next-category"
+            onClick={() => onSelectNextCategory(nextCategoryId)}
+            className="w-full py-3 px-4 rounded-xl bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 active:scale-98 text-white font-bold text-sm transition-all flex items-center justify-center gap-2 shadow-lg shadow-blue-500/25 border border-blue-400/30 group"
+          >
+            <span>Pređi na sledeću kategoriju: {nextCategoryInfo.name}</span>
+            <ArrowRight className="w-4 h-4 transition-transform group-hover:translate-x-1" />
+          </button>
+        )}
 
         {/* Practice Mode: Next Song button */}
         {category === 'practice' && onNextPracticeSong && (

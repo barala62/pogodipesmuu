@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Play, Pause, RotateCcw, FastForward, Check, Search, X, Music, Volume2, Sparkles } from 'lucide-react';
+import { Play, Pause, RotateCcw, FastForward, Check, Search, X, Music, Volume2, Sparkles, ArrowRight } from 'lucide-react';
 import { Song, GuessAttempt, SongPreviewResponse, STEP_DURATIONS, MAX_ATTEMPTS } from '../types';
 import { searchSongs } from '../data/songs/balkanSongs';
 import { ProgressBar } from './ProgressBar';
@@ -18,6 +18,8 @@ interface GameControlsProps {
   onSkip: () => void;
   onShowResults?: () => void;
   onNextPracticeSong?: () => void;
+  onSelectNextCategory?: () => void;
+  nextCategoryName?: string;
   isPracticeMode?: boolean;
 }
 
@@ -35,6 +37,8 @@ export const GameControls: React.FC<GameControlsProps> = ({
   onSkip,
   onShowResults,
   onNextPracticeSong,
+  onSelectNextCategory,
+  nextCategoryName,
   isPracticeMode,
 }) => {
   const [query, setQuery] = useState('');
@@ -292,7 +296,7 @@ export const GameControls: React.FC<GameControlsProps> = ({
           <span className="text-xs font-medium text-zinc-300">
             Igra je završena za ovu pesmu!
           </span>
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 flex-wrap justify-end">
             {onShowResults && (
               <button
                 id="btn-open-modal-results"
@@ -300,6 +304,16 @@ export const GameControls: React.FC<GameControlsProps> = ({
                 className="px-3.5 py-1.5 rounded-lg bg-emerald-500 hover:bg-emerald-400 text-zinc-950 font-bold text-xs transition-all shadow-sm"
               >
                 Prikaži rezultat
+              </button>
+            )}
+            {onSelectNextCategory && nextCategoryName && (
+              <button
+                id="btn-inline-next-category"
+                onClick={onSelectNextCategory}
+                className="px-3.5 py-1.5 rounded-lg bg-blue-600 hover:bg-blue-500 text-white font-bold text-xs transition-all shadow-sm flex items-center gap-1.5"
+              >
+                <span>Sledeća kategorija: {nextCategoryName}</span>
+                <ArrowRight className="w-3.5 h-3.5" />
               </button>
             )}
             {isPracticeMode && onNextPracticeSong && (

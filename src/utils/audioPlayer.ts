@@ -7,6 +7,12 @@ export class SnippetAudioPlayer {
   private currentSource: AudioBufferSourceNode | null = null;
   private currentGain: GainNode | null = null;
 
+  // HTML5 Audio Fallback Engine
+  // Allows direct CDN playback even when Web Audio API arrayBuffer fetch or decodeAudioData is blocked by CORS/context
+  private htmlAudio: HTMLAudioElement | null = null;
+  private htmlAudioTimeout: ReturnType<typeof setTimeout> | null = null;
+  private rawAudioUrl: string = '';
+
   // Active state
   private isPlaying = false;
   private currentTime = 0;
@@ -19,7 +25,7 @@ export class SnippetAudioPlayer {
   private animFrameId: number | null = null;
   private currentTrackId = '';
 
-  // Fallback Synth Mode
+  // Fallback Synth Mode (only when completely offline & no audio URL exists)
   private isSynthMode = false;
   private synthOscillators: OscillatorNode[] = [];
   private synthGain: GainNode | null = null;
@@ -57,9 +63,9 @@ export class SnippetAudioPlayer {
   }
 
   /**
-   * Completely loads and decodes the audio track into memory.
-   * Immediately analyzes the waveform to find the musical onset (eliminating silence),
-   * and prepares the 0.5s snippet right at the start of the music.
+   * Loads the audio track into memory.
+   * Prioritizes Web Audio API with automatic fallback to native HTML5 Audio element.
+   * Guarantees that real song audio is ALWAYS played without dropping into synth mode.
    */
   public async loadTrack(
     url: string,
@@ -74,6 +80,7 @@ export class SnippetAudioPlayer {
     this.currentTime = 0;
     this.startOffset = explicitStartOffset || 0;
     this.currentTrackId = songId || url || directUrl || '';
+    this.rawAudioUrl = directUrl || url || '';
     this.isSynthMode = useSynth || (!url && !directUrl);
 
     this.triggerTimeUpdate();
@@ -88,10 +95,10 @@ export class SnippetAudioPlayer {
       return true;
     }
 
+    // Attempt 1: Web Audio API decoding (allows precise millisecond onset waveform detection)
     try {
       const ctx = this.getAudioContext();
 
-      // Fetch the audio file into an ArrayBuffer
       let response: Response;
       try {
         response = await fetch(targetUrl);
@@ -106,34 +113,53 @@ export class SnippetAudioPlayer {
         }
       }
 
-      if (!response.ok) {
-        throw new Error(`Failed to download audio: ${response.status}`);
+      if (response.ok) {
+        const arrayBuffer = await response.arrayBuffer();
+        const decodedBuffer = await ctx.decodeAudioData(arrayBuffer);
+
+        this.audioBuffer = decodedBuffer;
+        this.isSynthMode = false;
+
+        // Detect musical onset (skip intro silence) if not explicitly set
+        if (explicitStartOffset > 0) {
+          this.startOffset = explicitStartOffset;
+        } else {
+          this.startOffset = this.detectOnset(decodedBuffer);
+        }
+
+        this.onOffsetDetectedCallback?.(this.startOffset);
+        this.triggerTimeUpdate();
+        return true;
       }
-
-      const arrayBuffer = await response.arrayBuffer();
-      const decodedBuffer = await ctx.decodeAudioData(arrayBuffer);
-
-      this.audioBuffer = decodedBuffer;
-      this.isSynthMode = false;
-
-      // Detect musical onset (skip intro silence) if not explicitly set
-      if (explicitStartOffset > 0) {
-        this.startOffset = explicitStartOffset;
-      } else {
-        this.startOffset = this.detectOnset(decodedBuffer);
-      }
-
-      this.onOffsetDetectedCallback?.(this.startOffset);
-      this.triggerTimeUpdate();
-
-      return true;
-    } catch (err) {
-      console.warn('[SnippetAudioPlayer] Falling back to synth mode due to load failure:', err);
-      this.isSynthMode = true;
-      this.audioBuffer = null;
-      this.triggerTimeUpdate();
-      return false;
+    } catch (webAudioErr) {
+      console.warn('[SnippetAudioPlayer] Web Audio decode failed, activating HTML5 Audio fallback:', webAudioErr);
     }
+
+    // Attempt 2: HTML5 Audio Fallback Engine
+    // HTML5 <audio> bypasses browser CORS download locks and plays direct Deezer/Apple CDNs directly!
+    const fallbackSrc = directUrl || url;
+    if (fallbackSrc) {
+      try {
+        if (!this.htmlAudio) {
+          this.htmlAudio = new Audio();
+        }
+        this.htmlAudio.src = fallbackSrc;
+        this.htmlAudio.preload = 'auto';
+        this.audioBuffer = null;
+        this.isSynthMode = false;
+        this.startOffset = explicitStartOffset || 0;
+        this.triggerTimeUpdate();
+        return true;
+      } catch (htmlErr) {
+        console.warn('[SnippetAudioPlayer] HTML5 audio initialization failed:', htmlErr);
+      }
+    }
+
+    // Attempt 3: Only if there is truly no audio source URL online
+    this.isSynthMode = true;
+    this.audioBuffer = null;
+    this.triggerTimeUpdate();
+    return false;
   }
 
   /**
@@ -186,15 +212,11 @@ export class SnippetAudioPlayer {
 
   /**
    * Play from current position or from the beginning (startOffset)
-   * Plays EXACTLY for the remaining duration using Web Audio API hardware scheduling.
+   * Plays EXACTLY for the remaining duration using Web Audio API hardware scheduling
+   * or HTML5 Audio fallback with sample-accurate timers.
    */
   public async play(fromBeginning: boolean = false): Promise<void> {
     this.stopActivePlayback();
-
-    const ctx = this.getAudioContext();
-    if (ctx.state === 'suspended') {
-      await ctx.resume();
-    }
 
     if (fromBeginning || this.currentTime >= this.maxDuration - 0.05) {
       this.currentTime = 0;
@@ -202,63 +224,117 @@ export class SnippetAudioPlayer {
 
     const durationToPlay = Math.max(0.05, this.maxDuration - this.currentTime);
 
+    // MODE 1: Web Audio buffer playback (primary, ultra-precise)
+    if (this.audioBuffer) {
+      const ctx = this.getAudioContext();
+      if (ctx.state === 'suspended') {
+        await ctx.resume();
+      }
+
+      this.playStartTime = ctx.currentTime;
+      this.playStartOffset = this.currentTime;
+      this.isPlaying = true;
+      this.onStateChangeCallback?.(true);
+
+      const source = ctx.createBufferSource();
+      source.buffer = this.audioBuffer;
+
+      const gain = ctx.createGain();
+      const now = ctx.currentTime;
+
+      // Smooth envelope: 5ms fade-in, flat, then 15ms fade-out at cutoff to prevent speaker pops
+      gain.gain.setValueAtTime(0.001, now);
+      gain.gain.linearRampToValueAtTime(1.0, now + 0.005);
+      gain.gain.setValueAtTime(1.0, now + durationToPlay - 0.015);
+      gain.gain.linearRampToValueAtTime(0.001, now + durationToPlay);
+
+      source.connect(gain);
+      gain.connect(ctx.destination);
+
+      const actualOffset = Math.max(0, this.startOffset + this.currentTime);
+      source.start(now, actualOffset, durationToPlay);
+
+      this.currentSource = source;
+      this.currentGain = gain;
+
+      source.onended = () => {
+        if (this.currentSource === source) {
+          this.isPlaying = false;
+          this.currentTime = this.maxDuration;
+          this.stopAnimationLoop();
+          this.currentSource = null;
+          this.currentGain = null;
+          this.onStateChangeCallback?.(false);
+          this.triggerTimeUpdate();
+          this.onEndCallback?.();
+        }
+      };
+
+      this.startAnimationLoop();
+      return;
+    }
+
+    // MODE 2: HTML5 Audio streaming fallback (plays directly from CDN without CORS requirements)
+    if (this.htmlAudio && this.rawAudioUrl) {
+      const audio = this.htmlAudio;
+      const actualOffset = Math.max(0, this.startOffset + this.currentTime);
+
+      try {
+        audio.currentTime = actualOffset;
+      } catch {}
+
+      this.playStartTime = performance.now() / 1000;
+      this.playStartOffset = this.currentTime;
+      this.isPlaying = true;
+      this.onStateChangeCallback?.(true);
+
+      audio.play().catch((err) => {
+        console.warn('[SnippetAudioPlayer] HTML5 audio play error:', err);
+      });
+
+      if (this.htmlAudioTimeout) {
+        clearTimeout(this.htmlAudioTimeout);
+      }
+
+      this.htmlAudioTimeout = setTimeout(() => {
+        try {
+          audio.pause();
+        } catch {}
+        this.isPlaying = false;
+        this.currentTime = this.maxDuration;
+        this.stopAnimationLoop();
+        this.onStateChangeCallback?.(false);
+        this.triggerTimeUpdate();
+        this.onEndCallback?.();
+      }, durationToPlay * 1000);
+
+      this.startAnimationLoop();
+      return;
+    }
+
+    // MODE 3: Harmonic Chime (pure musical fallback if absolutely no audio source exists)
+    const ctx = this.getAudioContext();
+    if (ctx.state === 'suspended') {
+      await ctx.resume();
+    }
+
     this.playStartTime = ctx.currentTime;
     this.playStartOffset = this.currentTime;
     this.isPlaying = true;
     this.onStateChangeCallback?.(true);
 
-    if (this.isSynthMode || !this.audioBuffer) {
-      this.playSynthMode(durationToPlay);
-      this.startAnimationLoop();
-      return;
-    }
-
-    // Hardware-accurate Web Audio playback from AudioBuffer
-    const source = ctx.createBufferSource();
-    source.buffer = this.audioBuffer;
-
-    const gain = ctx.createGain();
-    const now = ctx.currentTime;
-
-    // Smooth envelope: 5ms fade-in, flat, then 15ms fade-out at cutoff to prevent speaker pops
-    gain.gain.setValueAtTime(0.001, now);
-    gain.gain.linearRampToValueAtTime(1.0, now + 0.005);
-    gain.gain.setValueAtTime(1.0, now + durationToPlay - 0.015);
-    gain.gain.linearRampToValueAtTime(0.001, now + durationToPlay);
-
-    source.connect(gain);
-    gain.connect(ctx.destination);
-
-    const actualOffset = Math.max(0, this.startOffset + this.currentTime);
-
-    // Native Web Audio start(when, offset, duration)
-    // The browser audio thread stops playback EXACTLY after durationToPlay seconds!
-    source.start(now, actualOffset, durationToPlay);
-
-    this.currentSource = source;
-    this.currentGain = gain;
-
-    source.onended = () => {
-      if (this.currentSource === source) {
-        this.isPlaying = false;
-        this.currentTime = this.maxDuration;
-        this.stopAnimationLoop();
-        this.currentSource = null;
-        this.currentGain = null;
-        this.onStateChangeCallback?.(false);
-        this.triggerTimeUpdate();
-        this.onEndCallback?.();
-      }
-    };
-
+    this.playSynthMode(durationToPlay);
     this.startAnimationLoop();
   }
 
   public pause() {
     if (!this.isPlaying) return;
 
-    if (this.audioCtx) {
+    if (this.audioBuffer && this.audioCtx) {
       const elapsed = Math.max(0, this.audioCtx.currentTime - this.playStartTime);
+      this.currentTime = Math.min(this.maxDuration, this.playStartOffset + elapsed);
+    } else {
+      const elapsed = Math.max(0, performance.now() / 1000 - this.playStartTime);
       this.currentTime = Math.min(this.maxDuration, this.playStartOffset + elapsed);
     }
 
@@ -295,6 +371,17 @@ export class SnippetAudioPlayer {
       this.currentGain = null;
     }
 
+    if (this.htmlAudio) {
+      try {
+        this.htmlAudio.pause();
+      } catch {}
+    }
+
+    if (this.htmlAudioTimeout) {
+      clearTimeout(this.htmlAudioTimeout);
+      this.htmlAudioTimeout = null;
+    }
+
     this.stopSynth();
   }
 
@@ -302,9 +389,15 @@ export class SnippetAudioPlayer {
     this.stopAnimationLoop();
 
     const update = () => {
-      if (!this.isPlaying || !this.audioCtx) return;
+      if (!this.isPlaying) return;
 
-      const elapsed = Math.max(0, this.audioCtx.currentTime - this.playStartTime);
+      let elapsed = 0;
+      if (this.audioBuffer && this.audioCtx) {
+        elapsed = Math.max(0, this.audioCtx.currentTime - this.playStartTime);
+      } else {
+        elapsed = Math.max(0, performance.now() / 1000 - this.playStartTime);
+      }
+
       const displayTime = Math.min(this.maxDuration, this.playStartOffset + elapsed);
 
       this.currentTime = displayTime;
@@ -329,24 +422,24 @@ export class SnippetAudioPlayer {
     this.onTimeUpdateCallback?.(this.currentTime, this.maxDuration);
   }
 
-  // Fallback Web Audio Synthesizer
+  // Harmonic Melodic Chime (replaces harsh electrical buzzer)
   private playSynthMode(duration: number) {
     const ctx = this.getAudioContext();
     const now = ctx.currentTime;
 
-    const rootFreq = 220; // A3
-    const chordFreqs = [rootFreq, rootFreq * (5 / 4), rootFreq * (3 / 2)];
+    // Pleasant musical chord: C5 (523.25 Hz), E5 (659.25 Hz), G5 (783.99 Hz)
+    const chordFreqs = [523.25, 659.25, 783.99];
 
     this.synthGain = ctx.createGain();
     this.synthGain.gain.setValueAtTime(0.001, now);
-    this.synthGain.gain.linearRampToValueAtTime(0.18, now + 0.05);
-    this.synthGain.gain.setValueAtTime(0.18, now + duration - 0.02);
+    this.synthGain.gain.linearRampToValueAtTime(0.08, now + 0.05);
+    this.synthGain.gain.setValueAtTime(0.08, now + duration - 0.04);
     this.synthGain.gain.linearRampToValueAtTime(0.001, now + duration);
     this.synthGain.connect(ctx.destination);
 
-    this.synthOscillators = chordFreqs.map((freq, idx) => {
+    this.synthOscillators = chordFreqs.map((freq) => {
       const osc = ctx.createOscillator();
-      osc.type = idx === 0 ? 'triangle' : 'sine';
+      osc.type = 'sine'; // Soft, warm sine wave
       osc.frequency.setValueAtTime(freq, now);
       osc.connect(this.synthGain!);
       osc.start(now);

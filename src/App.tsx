@@ -485,6 +485,21 @@ export default function App() {
     setPracticeRound((r) => r + 1);
   };
 
+  // Next category sequence
+  const DAILY_CATEGORIES: GameCategory[] = ['daily-mix', 'moderno', 'ex-yu', 'narodna'];
+  const currentDailyIndex = DAILY_CATEGORIES.indexOf(category);
+  const nextCategoryId: GameCategory = currentDailyIndex >= 0
+    ? DAILY_CATEGORIES[(currentDailyIndex + 1) % DAILY_CATEGORIES.length]
+    : 'daily-mix';
+  const nextCategoryObj = CATEGORIES.find(c => c.id === nextCategoryId);
+
+  const handleSelectNextCategory = (targetCat?: GameCategory) => {
+    const nextCat = targetCat || nextCategoryId;
+    setShowConfetti(false);
+    setCategory(nextCat);
+    setShowGameOverModal(false);
+  };
+
   const currentCategoryInfo = CATEGORIES.find(c => c.id === category) || CATEGORIES[0];
 
   return (
@@ -540,6 +555,8 @@ export default function App() {
           onSkip={handleSkip}
           onShowResults={() => setShowGameOverModal(true)}
           onNextPracticeSong={handleNextPracticeSong}
+          onSelectNextCategory={() => handleSelectNextCategory()}
+          nextCategoryName={nextCategoryObj?.name}
           isPracticeMode={category === 'practice'}
         />
       </main>
@@ -593,6 +610,7 @@ export default function App() {
         userStats={userStats}
         onPlayFullAudio={handlePlayFullAudio}
         onNextPracticeSong={handleNextPracticeSong}
+        onSelectNextCategory={handleSelectNextCategory}
         onClose={() => setShowGameOverModal(false)}
       />
 
